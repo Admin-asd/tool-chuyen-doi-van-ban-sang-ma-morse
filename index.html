@@ -1,0 +1,272 @@
+<!doctype html>
+<!-- Vị trí file: wp-content/gb-tools/text-tools/dich-ma-morse.html -->
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Công cụ dịch mã Morse online - Chuyển đổi hai chiều</title>
+<meta name="description" content="Công cụ dịch mã Morse online nhanh chóng, chính xác. Chuyển đổi văn bản sang mã Morse và ngược lại hai chiều, hỗ trợ tiếng Việt hoàn toàn miễn phí.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"></script>
+<style type="text/tailwindcss">
+  @theme {
+    --font-sans: Roboto, ui-sans-serif, system-ui, sans-serif;
+    --color-primary: #fdca1e; --color-primary-hover: #e8b008; --color-primary-soft: #fffbeb;
+    --color-primary-ink: #9c6406; --color-ink: #0f172a; --color-neutral: #e5e7eb;
+  }
+</style>
+</head>
+<body class="bg-white font-sans text-ink antialiased">
+<main class="mx-auto max-w-5xl p-4 sm:p-6">
+  <!-- Điều hướng chế độ -->
+  <div class="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl mb-6">
+    <button type="button" id="btnTextToMorse" onclick="setMode('text2morse')" class="min-h-11 rounded-xl font-bold transition-all bg-primary text-ink shadow-sm">
+      Văn bản → Morse
+    </button>
+    <button type="button" id="btnMorseToText" onclick="setMode('morse2text')" class="min-h-11 rounded-xl font-semibold text-slate-500 hover:text-ink transition-all">
+      Morse → Văn bản
+    </button>
+  </div>
+
+  <div class="space-y-6">
+    <!-- Khung nhập liệu -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <label id="inputLabel" for="inputArea" class="font-bold text-ink">Nhập văn bản tiếng Việt hoặc Tiếng Anh</label>
+        <span class="text-xs text-slate-500">Tự động chuyển đổi khi gõ</span>
+      </div>
+      <textarea id="inputArea" rows="4" oninput="convert()" placeholder="Nhập văn bản cần dịch sang mã Morse..." class="w-full rounded-xl border border-neutral p-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/60 font-mono text-sm"></textarea>
+      <p class="mt-1.5 text-xs text-slate-500">
+        Hỗ trợ chữ cái Latin, chữ số và dấu câu thông dụng. Tiếng Việt có dấu sẽ tự động được gỡ dấu chuẩn Morse.
+      </p>
+    </div>
+
+    <!-- Thanh thao tác -->
+    <div class="flex flex-wrap gap-3">
+      <button type="button" onclick="clearAll()" class="min-h-11 rounded-xl border border-neutral px-5 font-semibold hover:border-primary">
+        Xóa hết
+      </button>
+      <button type="button" onclick="swapMode()" class="min-h-11 rounded-xl border border-neutral px-5 font-semibold hover:border-primary">
+        Đảo chiều dịch
+      </button>
+    </div>
+
+    <!-- Khung kết quả -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <label class="font-bold text-ink">Kết quả dịch</label>
+        <button type="button" id="copyBtn" onclick="copyResult()" class="hidden text-xs font-bold text-primary-ink hover:underline">
+          Sao chép kết quả
+        </button>
+      </div>
+      <div id="outputArea" aria-live="polite" class="min-h-[110px] rounded-xl bg-primary-soft border border-neutral/60 p-4 font-mono text-sm text-ink leading-relaxed break-words whitespace-pre-wrap">
+        <span class="text-slate-400 font-sans">Mã Morse dịch được sẽ hiển thị ngay tại đây...</span>
+      </div>
+    </div>
+
+    <!-- Bảng mã Morse tra cứu -->
+    <div class="border-t border-neutral pt-6">
+      <button type="button" onclick="toggleLegend()" class="w-full flex items-center justify-between py-2 font-bold text-ink text-left">
+        <span>Bảng mã Morse chuẩn quốc tế</span>
+        <svg id="legendIcon" class="w-5 h-5 text-slate-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div id="legendPanel" class="hidden mt-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-sm font-mono">
+          <!-- Điền tự động bởi JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  async function gbCopy(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+    const t = document.createElement('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select(); const ok = document.execCommand('copy'); t.remove(); return ok;
+  }
+  function gbDownload(data, filename, type = 'application/octet-stream') {
+    const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const gbStore = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  // BẢNG MÃ MORSE
+  const MORSE = {
+    'A': '.-',     'B': '-...',   'C': '-.-.',   'D': '-..',
+    'E': '.',      'F': '..-.',   'G': '--.',    'H': '....',
+    'I': '..',     'J': '.---',   'K': '-.-',    'L': '.-..',
+    'M': '--',     'N': '-.',     'O': '---',    'P': '.--.',
+    'Q': '--.-',   'R': '.-.',    'S': '...',    'T': '-',
+    'U': '..-',    'V': '...-',   'W': '.--',    'X': '-..-',
+    'Y': '-.--',   'Z': '--..',
+    '0': '-----',  '1': '.----',  '2': '..---',  '3': '...--',
+    '4': '....-',  '5': '.....',  '6': '-....',  '7': '--...',
+    '8': '---..',  '9': '----.',
+    '.': '.-.-.-', ',': '--..--', '?': '..--..', "'": '.----.',
+    '!': '-.-.--', '/': '-..-.',  '(': '-.--.',  ')': '-.--.-',
+    '&': '.-...',  ':': '---...', ';': '-.-.-.', '=': '-...-',
+    '+': '.-.-.',  '-': '-....-', '_': '..--.-', '"': '.-..-.',
+    '$': '...-..-', '@': '.--.-.'
+  };
+
+  const REVERSE_MORSE = {};
+  for (const [char, code] of Object.entries(MORSE)) {
+    REVERSE_MORSE[code] = char;
+  }
+
+  let mode = 'text2morse';
+
+  function removeVietnameseTones(str) {
+    return str.normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D');
+  }
+
+  function textToMorse(text) {
+    const clean = removeVietnameseTones(text).toUpperCase();
+    const words = clean.split(/\s+/);
+    const convertedWords = [];
+
+    for (const word of words) {
+      if (!word) continue;
+      const letters = [];
+      for (const char of word) {
+        if (MORSE[char]) {
+          letters.push(MORSE[char]);
+        }
+      }
+      if (letters.length > 0) {
+        convertedWords.push(letters.join(' '));
+      }
+    }
+    return convertedWords.join(' / ');
+  }
+
+  function morseToText(morse) {
+    const words = morse.trim().split(/\s*\/\s*/);
+    const decodedWords = [];
+
+    for (const word of words) {
+      if (!word) continue;
+      const codes = word.trim().split(/\s+/);
+      let decodedWord = '';
+      for (const code of codes) {
+        if (REVERSE_MORSE[code]) {
+          decodedWord += REVERSE_MORSE[code];
+        } else if (code) {
+          decodedWord += '';
+        }
+      }
+      if (decodedWord) decodedWords.push(decodedWord);
+    }
+    return decodedWords.join(' ');
+  }
+
+  function setMode(newMode) {
+    mode = newMode;
+    const btn1 = document.getElementById('btnTextToMorse');
+    const btn2 = document.getElementById('btnMorseToText');
+    const label = document.getElementById('inputLabel');
+    const input = document.getElementById('inputArea');
+
+    if (mode === 'text2morse') {
+      btn1.className = 'min-h-11 rounded-xl font-bold transition-all bg-primary text-ink shadow-sm';
+      btn2.className = 'min-h-11 rounded-xl font-semibold text-slate-500 hover:text-ink transition-all';
+      label.textContent = 'Nhập văn bản tiếng Việt hoặc Tiếng Anh';
+      input.placeholder = 'Nhập văn bản cần dịch sang mã Morse...';
+    } else {
+      btn2.className = 'min-h-11 rounded-xl font-bold transition-all bg-primary text-ink shadow-sm';
+      btn1.className = 'min-h-11 rounded-xl font-semibold text-slate-500 hover:text-ink transition-all';
+      label.textContent = 'Nhập mã Morse (dùng dấu . và -)';
+      input.placeholder = 'Ví dụ: -..- .. -. / -.-. .... .- ---';
+    }
+    convert();
+  }
+
+  function convert() {
+    const input = document.getElementById('inputArea').value;
+    const output = document.getElementById('outputArea');
+    const copyBtn = document.getElementById('copyBtn');
+
+    if (!input.trim()) {
+      output.innerHTML = '<span class="text-slate-400 font-sans">Mã Morse dịch được sẽ hiển thị ngay tại đây...</span>';
+      copyBtn.classList.add('hidden');
+      return;
+    }
+
+    const result = mode === 'text2morse' ? textToMorse(input) : morseToText(input);
+
+    if (result) {
+      output.textContent = result;
+      copyBtn.classList.remove('hidden');
+    } else {
+      output.innerHTML = '<span class="text-slate-400 font-sans">Không nhận diện được ký tự phù hợp...</span>';
+      copyBtn.classList.add('hidden');
+    }
+  }
+
+  function clearAll() {
+    document.getElementById('inputArea').value = '';
+    convert();
+  }
+
+  function swapMode() {
+    const output = document.getElementById('outputArea');
+    const currentOutput = output.textContent;
+    const isPlaceholder = output.querySelector('span');
+
+    if (!isPlaceholder && currentOutput) {
+      document.getElementById('inputArea').value = currentOutput;
+    }
+
+    setMode(mode === 'text2morse' ? 'morse2text' : 'text2morse');
+  }
+
+  async function copyResult() {
+    const output = document.getElementById('outputArea');
+    const text = output.textContent;
+    if (!text || output.querySelector('span')) return;
+
+    const ok = await gbCopy(text);
+    if (ok) {
+      const btn = document.getElementById('copyBtn');
+      const oldText = btn.textContent;
+      btn.textContent = 'Đã sao chép!';
+      setTimeout(() => { btn.textContent = oldText; }, 1500);
+    }
+  }
+
+  function toggleLegend() {
+    const panel = document.getElementById('legendPanel');
+    const icon = document.getElementById('legendIcon');
+    panel.classList.toggle('hidden');
+    icon.classList.toggle('rotate-180');
+  }
+
+  function buildLegend() {
+    const container = document.querySelector('#legendPanel > div');
+    const entries = Object.entries(MORSE);
+    entries.sort((a, b) => {
+      const order = c => /[A-Z]/.test(c) ? 0 : /[0-9]/.test(c) ? 1 : 2;
+      return order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]);
+    });
+
+    container.innerHTML = entries.map(([char, code]) => `
+      <div class="flex items-center justify-between bg-slate-50 border border-neutral rounded-lg px-3 py-1.5">
+        <span class="font-bold text-primary-ink">${char}</span>
+        <span class="text-slate-600">${code}</span>
+      </div>
+    `).join('');
+  }
+
+  // Dữ liệu ví dụ mặc định ban đầu
+  document.getElementById('inputArea').value = 'Xin chào Golden Bee';
+  buildLegend();
+  convert();
+</script>
+</body>
+</html>
